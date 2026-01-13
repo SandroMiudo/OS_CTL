@@ -1,0 +1,15 @@
+[Unit]
+Description=Seat 1 Display Proxy
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemd-run \
+    --slice=system.slice \
+    --property=EnvironmentFile=/etc/seat-display-driver/display_env \
+    --setenv=SEAT=Seat1 \
+    --unit=seat-display-transient-instance-1.service \
+    /usr/local/bin/seat_display_driver/proxy/proxy
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target
