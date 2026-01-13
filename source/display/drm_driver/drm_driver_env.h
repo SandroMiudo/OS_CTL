@@ -1,0 +1,9 @@
+#ifndef DISPLAY_DRIVER_ENV
+#define DISPLAY_DRIVER_ENV
+
+#define DRM_CARD "DRM_CARD"
+#define DRM_NUM "DRM_CARD_NUM"
+
+#define DRM_CONN "DRM_CONN"
+
+#endif
