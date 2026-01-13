@@ -1,0 +1,5 @@
+build-essential
+libdrm-dev
+libx11-dev
+xnest
+ocl-icd-opencl-dev
