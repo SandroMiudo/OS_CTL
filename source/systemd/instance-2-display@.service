@@ -1,0 +1,16 @@
+[Unit]
+Description=Seat Display Proxy on %I
+ConditionPathExists=/dev/%I
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemd-run \
+    --setenv=SEAT=Seat2 \
+    --slice=system.slice \
+    --setenv=XAUTHORITY=/etc/seat-display-driver/Xauthority \
+    --unit=seat-display-transient@%I.service \
+    /usr/local/bin/seat_display_driver/proxy/proxy 
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
