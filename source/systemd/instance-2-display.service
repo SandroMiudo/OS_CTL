@@ -1,0 +1,15 @@
+[Unit]
+Description=Seat 2 Display Proxy
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemd-run \
+    --slice=system.slice \
+    --setenv=XAUTHORITY=/etc/seat-display-driver/Xauthority \
+    --setenv=SEAT=Seat2 \
+    --unit=seat-display-transient-instance-2.service \
+    /usr/local/bin/seat_display_driver/proxy/proxy
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target

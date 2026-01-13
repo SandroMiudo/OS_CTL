@@ -1,0 +1,281 @@
+// xlib_driver_core.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <X11/Xlib.h>
+#include "display_driver.h"
+#include "frame_buffer.h"
+
+void obtain_display_info(int (*p)[4]);
+
+// Store Display* and Window globally for this driver module
+static Display *driver_display = NULL;
+static Window driver_window = 0;
+static fb_info global_fb = {};
+
+/* Shared non-Xlib logging helper: prints error details without calling Xlib. */
+static void xlib_log_error_details(const char *tag,
+                                  unsigned long serial,
+                                  int error_code,
+                                  int request_code,
+                                  int minor_code,
+                                  unsigned long resourceid,
+                                  const char *description) {
+    fprintf(stderr, "%s serial=%lu error_code=%d request_code=%d minor_code=%d resource=0x%lx\n",
+            tag, serial, error_code, request_code, minor_code, resourceid);
+    if (description && description[0]) {
+        fprintf(stderr, "%s description: %s\n", tag, description);
+    }
+}
+
+/* X error handler: prints detailed XErrorEvent info and human-readable text. */
+static int xlib_x_error_handler(Display *dpy, XErrorEvent *ev) {
+    char err_text[128] = {0};
+    /* Try to get human-readable error text from the server */
+    XGetErrorText(dpy, ev->error_code, err_text, sizeof(err_text));
+
+    /* Use shared helper to print details */
+    xlib_log_error_details("[XLIB ERROR]",
+                           ev->serial,
+                           ev->error_code,
+                           ev->request_code,
+                           ev->minor_code,
+                           ev->resourceid,
+                           err_text);
+
+    /* Return 0 to let Xlib continue its default error processing where appropriate */
+    return 0;
+}
+
+/* X I/O error handler: called on fatal I/O errors (connection lost).
+ * Should not attempt Xlib calls; print an explanatory message and terminate.
+ */
+static int xlib_io_error_handler(Display *dpy) {
+    int errnum = errno;
+    /* IO handler must not call Xlib; use the shared logger with limited info */
+    if (errnum != 0) {
+        char desc[128];
+        snprintf(desc, sizeof(desc), "errno=%d (%s)", errnum, strerror(errnum));
+        xlib_log_error_details("[XLIB IO ERROR]", 0UL, errnum, 0, 0, 0UL, desc);
+    } else {
+        xlib_log_error_details("[XLIB IO ERROR]", 0UL, -1, 0, 0, 0UL, "connection lost");
+    }
+    _exit(1);
+    return 0; /* unreachable */
+}
+
+/**
+ * Xlib driver init routine.
+ * @param display_id - The display string (e.g., ":1") passed by display_manager
+ * @return 0 on success, non-zero on failure
+ */
+uint8_t xlib_init() {
+    // Open the specified X display
+
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    printf("Using XLIB Driver ...\n");
+
+    driver_display = XOpenDisplay(NULL);
+    if (!driver_display) {
+        fprintf(stderr, "Failed to open X display:\n");
+        return 1;
+    }
+
+    /* register X error handler to get readable X server errors in our logs */
+    XSetErrorHandler(xlib_x_error_handler);
+    /* register IO error handler: logs and terminates on fatal I/O errors */
+    XSetIOErrorHandler(xlib_io_error_handler);
+    /* do not force global synchronous mode (can cause transient EAGAIN IO errors)
+     * Use XSync at points where we need to ensure errors are processed. */
+    XSynchronize(driver_display, False);
+
+    int screen = DefaultScreen(driver_display);
+    Window root = RootWindow(driver_display, screen);
+
+    int width = DisplayWidth(driver_display, screen);
+    int height = DisplayHeight(driver_display, screen);
+    printf("X display opened : %dx%d\n", width, height);
+
+    // Create a window that covers the full screen
+    driver_window = XCreateSimpleWindow(
+        driver_display,
+        root,
+        0, 0,             // x, y position
+        width, height,    // width, height (full screen)
+        0,                // border width
+        BlackPixel(driver_display, screen),
+        WhitePixel(driver_display, screen)
+    );
+
+    // Map window and flush commands to the X server
+    XMapWindow(driver_display, driver_window);
+    XFlush(driver_display);
+
+    printf("Flushed window == init completed ...\n");
+
+    return 0; // Success
+}
+
+void dump_screen_context(int (*info_data_arr)[4]) {
+    SPLIT_INFO_DATA(int, *info_data_arr, s, w, h, d);
+
+    printf("Screen Context:\n\tScreen = %d\n\tWidth = %d\n\tHeight = %d\n\tDepth = %d\n",
+        s, w, h, d);
+}
+
+void dump_frame_buffer_context(fb_info_ptr fb) {
+    if (!fb) {
+        printf("Frame Buffer context: (null)\n");
+        return;
+    }
+
+    size_t expected_size = (size_t)fb->stride * (size_t)fb->height;
+
+    printf("Frame Buffer context:\n");
+    printf("\tWidth  = %u\n", fb->width);
+    printf("\tHeight = %u\n", fb->height);
+    printf("\tStride = %u (bytes per row)\n", fb->stride);
+    printf("\tBPP    = %u (bytes per pixel)\n", fb->bpp);
+    printf("\tBuffer = %p\n", (void*)fb->buffer);
+    printf("\tExpected allocation size = %zu bytes\n", expected_size);
+}
+
+void obtain_display_info(int (*info_data_arr)[4]) {
+    int screen = DefaultScreen(driver_display);
+    int width = DisplayWidth(driver_display, screen);
+    int height = DisplayHeight(driver_display, screen);
+    int depth = DefaultDepth(driver_display, screen);
+
+    (*info_data_arr)[SCREEN_INFO] = screen;
+    (*info_data_arr)[WIDTH_INFO] = width;
+    (*info_data_arr)[HEIGHT_INFO] = height;
+    (*info_data_arr)[DEPTH_INFO] = depth;
+}
+
+int xlib_run() {
+    if (!driver_display || !driver_window) {
+        fprintf(stderr, "[xlib_run] ERROR: X display or window not initialized.\n");
+        return 1;
+    }
+
+    int info_data_arr[4];
+    printf("[xlib_run] calling obtain_display_info()...\n");
+    obtain_display_info(&info_data_arr);
+    printf("[xlib_run] obtain_display_info() returned: screen=%d width=%d height=%d depth=%d\n",
+           info_data_arr[SCREEN_INFO], info_data_arr[WIDTH_INFO], info_data_arr[HEIGHT_INFO], info_data_arr[DEPTH_INFO]);
+
+    SPLIT_INFO_DATA(int, info_data_arr, s, w, h, d);
+
+    printf("[xlib_run] FRAME_BUFFER_INFO_FROM_DEPTH with w=%d h=%d d=%d\n", w, h, d);
+    FRAME_BUFFER_INFO_W_PAD(_global_fb, w, h, d, 8);
+
+    size_t fb_size = (size_t)_global_fb.stride * (size_t)_global_fb.height;
+    printf("[xlib_run] allocating framebuffer: stride=%d height=%d size=%zu\n", _global_fb.stride, _global_fb.height, fb_size);
+    uint8_t* frame_buffer = (uint8_t*)malloc(fb_size);
+
+    if (frame_buffer == NULL){
+        fprintf(stderr, "[xlib_run] ERROR: Failed to allocate framebuffer (%zu bytes).\n", fb_size);
+        return 1;
+    }
+
+    global_fb = _global_fb;
+    global_fb.buffer = frame_buffer;
+
+    printf("[global fb stat] Width=%d , Height=%d", global_fb.width, global_fb.height);
+
+    printf("[xlib_run] Dumping context:\n");
+
+    dump_screen_context(&info_data_arr);
+    dump_frame_buffer_context(&global_fb);
+
+    printf("[xlib_run] creating XImage (w=%d h=%d depth=%d)...\n", w, h, d);
+    XImage* driver_ximage = XCreateImage(
+        driver_display,
+        DefaultVisual(driver_display, s),
+        d,
+        ZPixmap,
+        0,
+        (char *)global_fb.buffer,
+        w,
+        h,
+        32,
+        global_fb.stride
+    );
+
+    if (!driver_ximage) {
+        fprintf(stderr, "[xlib_run] ERROR: Failed to create XImage.\n");
+        free(global_fb.buffer);
+        return 1;
+    }
+    printf("[xlib_run] XImage created successfully. bytes_per_line=%d bytes_per_pixel=%d\n",
+           driver_ximage->bytes_per_line, driver_ximage->bits_per_pixel/8);
+
+    printf("[xlib_run] obtaining GC...\n");
+    GC gc = DefaultGC(driver_display, s);
+    if (gc == NULL) {
+        fprintf(stderr, "[xlib_run] WARNING: DefaultGC returned NULL.\n");
+    } else {
+        printf("[xlib_run] DefaultGC acquired.\n");
+    }
+
+    // Target FPS
+    const int target_fps = 60;
+    const int frame_delay_us = 1000000 / target_fps;
+
+    printf("[xlib_run] entering render loop (target %d FPS).\n", target_fps);
+    unsigned long frame_counter = 0;
+    while (1) {
+        // Update the window with the current framebuffer
+        XPutImage(driver_display, driver_window, gc, driver_ximage,
+                  0, 0, // src
+                  0, 0, // dst
+                  w, h);
+
+        // Flush the X output buffer and synchronously process errors/events
+        XFlush(driver_display);
+        // Process any pending errors/events now
+        XSync(driver_display, False);
+
+        // Log every 300 frames to avoid spamming logs
+        if ((frame_counter++ % 300) == 0) {
+            printf("[xlib_run] frame %lu updated (w=%d h=%d).\n", frame_counter, w, h);
+        }
+
+        // Sleep to maintain ~target FPS
+        if (usleep(frame_delay_us) != 0) {
+            fprintf(stderr, "[xlib_run] WARNING: usleep interrupted.\n");
+        }
+    }
+
+    // Cleanup (not reached in infinite loop)
+    printf("[xlib_run] cleaning up XImage and framebuffer.\n");
+    XDestroyImage(driver_ximage);
+
+    /* Ensure server processed all requests and close connection cleanly */
+    XSync(driver_display, False);
+    XCloseDisplay(driver_display);
+    driver_display = NULL;
+
+    return 0;
+}
+
+void xlib_draw_image(int x, int y, int width, int height, const uint32_t* buffer) {
+    fb_draw_image(&global_fb, x, y, width, height, buffer);
+}
+
+void xlib_draw_pixel(int x, int y, uint32_t color) {
+    fb_set_pixel(&global_fb, x, y, color);
+}
+
+/**
+ * Optional getter functions for other modules to access the Display* and Window
+ */
+Display* get_driver_display(void) {
+    return driver_display;
+}
+
+Window get_driver_window(void) {
+    return driver_window;
+}

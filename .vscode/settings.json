@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.dbclient-js": "javascript",
+        "dirent.h": "c",
+        "display_driver_defs.h": "c",
+        "xf86drmmode.h": "c"
+    }
+}
