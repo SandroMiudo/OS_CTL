@@ -1,7 +1,7 @@
 # OS_CTL — Multi-Language OS Control & Display Management
 
 **OS_CTL** is a core system utility for **systemd-based Linux hosts** that lets you manage displays, seats, and system services.  
-It provides **APIs and FFI bindings for multiple languages** (C, Python, Shell, etc.), enabling other languages or applications to render content, control displays, and interact with system-level functionality programmatically.
+It provides **APIs and FFI bindings for multiple languages** (C, Pyton) , (Rust is on development), enabling other languages or applications to render content, control displays, and interact with system-level functionality programmatically.
 
 ---
 
