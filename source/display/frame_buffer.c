@@ -1,21 +1,16 @@
 #include "frame_buffer.h"
 
-static void fb_clear(fb_info_ptr fb, uint32_t to) {
-    for (int i = 0; i < fb->width * fb->height; i++)
-        ((uint32_t *)fb->buffer)[i] = to;
-}
-
 static void fb_set_white(fb_info_ptr fb) {
-    fb_clear(fb, 0x00FFFFFF);
+    fb_fill(fb, 0x00FFFFFF);
 }
 
 static void fb_set_black(fb_info_ptr fb) {
-    fb_clear(fb, 0x00000000);
+    fb_fill(fb, 0x00000000);
 }
 
 static void (*f[2])(fb_info_ptr) = { [0] = fb_set_white, [1] = fb_set_black };
 
-void fill_command(FrameBufferFillCommands comm, fb_info_ptr fb) {
+static void fill_command(FrameBufferFillCommands comm, fb_info_ptr fb) {
     f[comm](fb);
 }
 
@@ -42,4 +37,18 @@ void fb_draw_image(fb_info_ptr fb, int x0, int y0,
             *pixel_ptr = image[y * img_width + x];
         }
     }
+}
+
+void fb_fill(fb_info_ptr fb, uint32_t to) {
+    to &= 0x00FFFFFF; // 0 out upper 8bits
+    for (int i = 0; i < fb->width * fb->height; i++)
+        ((uint32_t *)fb->buffer)[i] = to;
+}
+
+void fb_clear(fb_info_ptr fb, uint8_t on) {
+    on &= 0x01;
+    if (on)
+        fill_command(BLACK_OUT, fb);
+    else
+        fill_command(WHITE_OUT, fb);
 }

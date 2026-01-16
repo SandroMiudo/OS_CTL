@@ -10,11 +10,20 @@ typedef struct _fb_info {
     uint8_t *buffer;    // mmap'd pointer
 } fb_info, *fb_info_ptr;
 
+typedef enum _FrameBufferFillCommands {
+    WHITE_OUT,
+    BLACK_OUT,
+} FrameBufferFillCommands;
+
 extern void fb_draw_image(fb_info *fb, int x0, int y0,
                    uint32_t img_width, uint32_t img_height,
                    const uint32_t *image);
 
 extern void fb_set_pixel(fb_info *fb, int x, int y, uint32_t color);          
+
+extern void fb_fill(fb_info_ptr fb, uint32_t to);
+
+extern void fb_clear(fb_info_ptr fb, uint8_t on);
 
 #define RGB_BPP 3
 #define ARGB_BPP RGB_BPP + 1
@@ -46,10 +55,5 @@ extern void fb_set_pixel(fb_info *fb, int x, int y, uint32_t color);
          b = (type)((arr)[WIDTH_INFO]),  \
          c = (type)((arr)[HEIGHT_INFO]), \
          d = (type)((arr)[DEPTH_INFO]);
-
-typedef enum _FrameBufferFillCommands {
-    WHITE_OUT,
-    BLACK_OUT,
-} FrameBufferFillCommands;
 
 #endif
