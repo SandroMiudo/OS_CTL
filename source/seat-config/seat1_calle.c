@@ -168,5 +168,16 @@ int main() {
         // handle multi-GPU logic here, use kmscon to start a drm based terminal on second card
     }
 
+    sigset_t set;
+    int sig;
+
+    // keep cgroup up, otherwise xnested server will shutdown
+    // auto close with systemctl stop, or by sending sigusr1 or sigusr2
+    // using systemctl --kill-who=service --signal=how
+    if (sigwait(&set, &sig) != 0) {
+        perror("sigwait failed");
+        return 1;
+    }
+
     return 0;
 }
