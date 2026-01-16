@@ -6,12 +6,22 @@ extern uint8_t xlib_init();
 extern void xlib_run();
 extern void xlib_draw_image(int x, int y, int width, int height, const uint32_t* buffer);
 extern void xlib_draw_pixel(int x, int y, uint32_t color);
+extern void xlib_clear_screen(uint8_t on);
+extern void xlib_fill_screen(uint32_t color);
+
+extern int xlib_get_width();
+extern int xlib_get_height();
 
 static DisplayDriver xlib_driver = {
     .init_routine = xlib_init,
     .run = xlib_run,
     .draw_image = xlib_draw_image,
-    .draw_pixel = xlib_draw_pixel
+    .draw_pixel = xlib_draw_pixel,
+    .clear_screen = xlib_clear_screen,
+    .fill_screen = xlib_fill_screen,
+    \
+    .get_width = xlib_get_width,
+    .get_height = xlib_get_height
 };
 
 DisplayDriver* global_driver = &xlib_driver;
