@@ -8,7 +8,7 @@ CFLAGS = -Wall -O2 \
          -Idisplay \
 		 -I.
 
-LDFLAGS = -shared -Wl,-soname,$(DISPLAY_DRIVER_SONAME)
+LDFLAGS = -shared -Wl,-soname,$(DISPLAY_DRIVER_SONAME) -pthread
 
 VERSION = 1.0.0
 
@@ -286,6 +286,12 @@ install: all
 		echo "NX_HEIGHT=$(NX_HEIGHT)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
 		echo "DISPLAY=$$DISPLAY" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
 		echo "XAUTHORITY=$$XAUTHORITY" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "DEBUG=$(DEBUG)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "BORDER_WIDTH=$(BORDER_WIDTH)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "NX_OFF_X=$(NX_OFF_X)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "NX_OFF_Y=$(NX_OFF_Y)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "DEBUG=$(DEBUG)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "MAX_CLIENTS=$(MAX_CLIENTS)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
 	fi
 
 	@echo "Install complete."
