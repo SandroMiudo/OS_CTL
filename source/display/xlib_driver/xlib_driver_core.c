@@ -104,9 +104,9 @@ uint8_t xlib_init() {
         root,
         0, 0,             // x, y position
         width, height,    // width, height (full screen)
-        0,                // border width
-        BlackPixel(driver_display, screen),
-        WhitePixel(driver_display, screen)
+        10,                // border width
+        WhitePixel(driver_display, screen),
+        BlackPixel(driver_display, screen)
     );
 
     // Map window and flush commands to the X server
@@ -261,14 +261,6 @@ int xlib_run() {
     return 0;
 }
 
-void xlib_draw_image(int x, int y, int width, int height, const uint32_t* buffer) {
-    fb_draw_image(&global_fb, x, y, width, height, buffer);
-}
-
-void xlib_draw_pixel(int x, int y, uint32_t color) {
-    fb_set_pixel(&global_fb, x, y, color);
-}
-
 /**
  * Optional getter functions for other modules to access the Display* and Window
  */
@@ -278,4 +270,28 @@ Display* get_driver_display(void) {
 
 Window get_driver_window(void) {
     return driver_window;
+}
+
+void xlib_draw_image(int x, int y, int width, int height, const uint32_t* buffer) {
+    fb_draw_image(&global_fb, x, y, width, height, buffer);
+}
+
+void xlib_draw_pixel(int x, int y, uint32_t color) {
+    fb_set_pixel(&global_fb, x, y, color);
+}
+
+void xlib_clear_screen(uint8_t on) {
+    fb_clear(&global_fb, on);
+}
+
+void xlib_fill_screen(uint32_t color) {
+    fb_fill(&global_fb, color);
+}
+
+int xlib_get_width() {
+    return DisplayWidth(get_driver_display(), DefaultScreen(get_driver_display()));
+}
+
+int xlib_get_height() {
+    return DisplayHeight(get_driver_display(), DefaultScreen(get_driver_display()));
 }
