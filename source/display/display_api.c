@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h> 
+#include "global_structs.h"
+#include "numpy_api.h"
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -39,15 +41,16 @@ void display_cb_log_u_only(char* msg, int _) {
 // logs non 
 void display_cb_non(char* msg, int status) {}
 
-void display_draw_image(const cmd_draw_image_t* cmd, display_flags_t flags, 
+void display_draw_image(cmd_draw_image_t* cmd, display_flags_t flags, 
     display_callback_f cb, char* msg){
     int status;
+    LOG("[display_draw_image]\n");
     if (global_driver && global_driver->draw_image) {
         status = (flags & DISPLAY_WNO) ? 
             pthread_mutex_trylock(&lock) : 
             pthread_mutex_lock(&lock);
         if(status) {
-            cb(msg);
+            cb(msg, status);
             return;
         }
         global_driver->draw_image(
@@ -59,15 +62,16 @@ void display_draw_image(const cmd_draw_image_t* cmd, display_flags_t flags,
     }
 }
 
-void display_set_pixel(const cmd_set_pixel_t* cmd, display_flags_t flags, 
+void display_set_pixel(cmd_set_pixel_t* cmd, display_flags_t flags, 
     display_callback_f cb, char* msg){
     int status;
+    LOG("[display_set_pixel]\n");
     if (global_driver && global_driver->draw_pixel) {
         status = (flags & DISPLAY_WNO) ? 
             pthread_mutex_trylock(&lock) : 
             pthread_mutex_lock(&lock);
         if(status) {
-            cb(msg);
+            cb(msg, status);
             return;
         }
         global_driver->draw_pixel(cmd->x, cmd->y, cmd->color);
@@ -75,15 +79,16 @@ void display_set_pixel(const cmd_set_pixel_t* cmd, display_flags_t flags,
     }       
 }
 
-void display_clear_screen(const cmd_clear_screen_t* cmd, display_flags_t flags, 
+void display_clear_screen(cmd_clear_screen_t* cmd, display_flags_t flags, 
     display_callback_f cb, char* msg){
     int status;
+    LOG("[display_clear_screen]\n");
     if (global_driver && global_driver->clear_screen) {
         status = (flags & DISPLAY_WNO) ? 
             pthread_mutex_trylock(&lock) : 
             pthread_mutex_lock(&lock);
         if(status) {
-            cb(msg);
+            cb(msg, status);
             return;
         }
         global_driver->clear_screen(cmd->on);
@@ -91,15 +96,16 @@ void display_clear_screen(const cmd_clear_screen_t* cmd, display_flags_t flags,
     }
 }
 
-void display_fill_screen(const cmd_fill_screen_t* cmd, display_flags_t flags, 
+void display_fill_screen(cmd_fill_screen_t* cmd, display_flags_t flags, 
     display_callback_f cb, char* msg) {
     int status;
+    LOG("[display_fill_screen]\n");
     if (global_driver && global_driver->fill_screen) {
         status = (flags & DISPLAY_WNO) ? 
             pthread_mutex_trylock(&lock) : 
             pthread_mutex_lock(&lock);
         if(status) {
-            cb(msg);
+            cb(msg, status);
             return;
         }
         global_driver->fill_screen(cmd->color);
@@ -107,16 +113,44 @@ void display_fill_screen(const cmd_fill_screen_t* cmd, display_flags_t flags,
     }
 }
 
-int display_query_width(void){
+int display_query_width() {
+    LOG("[display_query_width]\n");
     if (global_driver && global_driver->get_width)
         return global_driver->get_width();
 
     return -1;
 }
 
-int display_query_height(void){
+int display_query_height() {
+    LOG("[display_query_height]\n");
     if (global_driver && global_driver->get_height)
         return global_driver->get_height();
 
     return -1;
+}
+
+void cmd_draw_image_set_buffer(cmd_draw_image_t *cmd, PyObject *obj) {
+    // Convert Python object to a contiguous NumPy array of uint32
+    
+    LOG("Py object = %p\n", obj);
+
+    assert(PyArray_API != NULL);
+
+    PyArrayObject *arr = (PyArrayObject*) PyArray_FROM_OTF(
+        obj,              // Python object assigned to the field
+        NPY_UINT32,          // Must be dtype uint32
+        NPY_ARRAY_IN_ARRAY | NPY_ARRAY_ENSUREARRAY // Must be C-contiguous & aligned; copy if not
+    );
+
+    if (!arr) {
+        PyErr_SetString(PyExc_TypeError, "Expected a numpy uint32 array");
+        PyErr_Print();
+        return;
+    }
+
+    cmd->buffer = (uint32_t*)PyArray_DATA(arr);
+
+    // Keep array alive to prevent Python GC from freeing the memory
+    Py_XDECREF(cmd->__buffer_owner);
+    cmd->__buffer_owner = (PyObject*)arr;
 }

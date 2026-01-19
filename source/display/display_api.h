@@ -2,6 +2,7 @@
 #define DISPLAY_API_H
 
 #include <stdint.h>
+#include <Python.h>
 
 #define WHITE 0 // off
 #define BLACK 1 // on
@@ -25,6 +26,7 @@ typedef struct {
     int width;
     int height;
     uint32_t* buffer;
+    PyObject *__buffer_owner; // private usage only
 } cmd_draw_image_t;
 
 // For DISPLAY_SET_PIXEL
@@ -48,22 +50,22 @@ typedef struct {
 // Dedicated functions
 // --------------------
 
-typedef void (*display_callback_f)(char* msg);
+typedef void (*display_callback_f)(char* msg, int status);
 
-void display_draw_image(const cmd_draw_image_t* cmd, display_flags_t flags, 
+void display_draw_image(cmd_draw_image_t* cmd, display_flags_t flags, 
     display_callback_f cb, char* msg);
-void display_set_pixel(const cmd_set_pixel_t* cmd, display_flags_t flags, 
+void display_set_pixel(cmd_set_pixel_t* cmd, display_flags_t flags, 
     display_callback_f cb, char* msg);
-void display_clear_screen(const cmd_clear_screen_t* cmd, display_flags_t flags, 
+void display_clear_screen(cmd_clear_screen_t* cmd, display_flags_t flags, 
     display_callback_f cb, char* msg);
-void display_fill_screen(const cmd_fill_screen_t* cmd, display_flags_t flags, 
+void display_fill_screen(cmd_fill_screen_t* cmd, display_flags_t flags, 
     display_callback_f cb, char* msg);
 
 // --------------------
 // Query functions
 // --------------------
 
-int display_query_width(void);
-int display_query_height(void);
+int display_query_width();
+int display_query_height();
 
 #endif // DISPLAY_API_H
