@@ -3,7 +3,7 @@
 # ========================
 CC = gcc
 SWIG = swig
-CFLAGS = -Wall -O2 \
+CFLAGS = -Wall -Wextra -Wshadow -Wconversion -O2 \
 	     -fPIC \
          -Idisplay \
 		 -I.
@@ -20,6 +20,9 @@ DISPLAY_DRIVER ?= XLIB
 NX_HEIGHT ?= 1080
 NX_WIDTH ?= 1920
 
+PYTHON_CFLAGS = $(shell python3-config --includes) -Iinclude/python
+PYTHON_LDFLAGS = $(shell python3-config --ldflags --embed)
+
 ifeq ($(DISPLAY_DRIVER), $(DISPLAY_DRIVER_DRM))
 CFLAGS += -DDISPLAY_DRIVER_DRM $(shell pkg-config --cflags-only-I libdrm) -Idisplay/drm_driver
 LDFLAGS += $(shell pkg-config --libs libdrm) 
@@ -35,7 +38,7 @@ endif
 SWIG_INTERFACE := display_api.i
 SWIG_PYTHON := $(SWIG) -python
 SWIG_RUST   := $(SWIG) -rust
-SWIG_OPTIONS := -Wall
+SWIG_OPTIONS := -Wall # -debug-tmused 
 
 GLOBAL_CONFIG_DIR := /etc/seat-display-driver
 GLOBAL_CONFIG := display_env
@@ -177,10 +180,10 @@ $(DISPLAY_BUILD_DIR):
 # ========================
 # Build display_driver
 # ========================
-$(DISPLAY_DRIVER_LIB): $(DISPLAY_DRIVER_SRC) | $(DISPLAY_BUILD_DIR)
-	$(CC) $(CFLAGS) $(DISPLAY_DRIVER_SRC) $(LDFLAGS) -o $@
+$(DISPLAY_DRIVER_LIB): $(DISPLAY_DRIVER_SRC) $(GLOBAL_UTIL_SRC) | $(DISPLAY_BUILD_DIR)
+	$(CC) $(CFLAGS) $(PYTHON_CFLAGS) $^ $(LDFLAGS) $(PYTHON_LDFLAGS) -o $@
 	# Create SONAME and default symlink
-	ln -s $@ $(DISPLAY_DRIVER_SONAME) # todo : this is an unecassry link
+	ln -s $@ $(DISPLAY_DRIVER_SONAME)
 	ln -s $(DISPLAY_DRIVER_SONAME) $(DISPLAY_BUILD_DIR)/libdisplay_driver.so
 
 	@echo "Built lib-display_driver -> $@"
@@ -191,7 +194,7 @@ $(info $(dir $(DISPLAY_DRIVER_LIB)))
 # Build display_manager
 # ========================
 $(DISPLAY_BIN): $(DISPLAY_SRC) | $(DISPLAY_BUILD_DIR) $(DISPLAY_DRIVER_LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -L$(abspath $(dir $(DISPLAY_DRIVER_LIB))) -ldisplay_driver -Wl,-rpath=$(abspath $(dir $(DISPLAY_DRIVER_LIB)))
+	$(CC) $(CFLAGS) $(PYTHON_CFLAGS) -o $@ $^ -L$(abspath $(dir $(DISPLAY_DRIVER_LIB))) -ldisplay_driver
 	@echo "Built display_manager -> $@"
 
 # ========================
@@ -211,7 +214,7 @@ ffi: python_ffi | $(DISPLAY_DRIVER_LIB) $(FFI_BUILD_DIR)
 python_ffi:
 	@mkdir -p $(PY_FFI_BUILD_DIR)
 	$(SWIG_PYTHON) $(SWIG_OPTIONS) -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.c -outdir $(PY_FFI_BUILD_DIR) $(PY_FFI_SRC)/$(SWIG_INTERFACE)
-	$(CC) -fPIC -c $(FFI_BUILD_DIR)/display_api_wrap.c $(shell python3-config --includes) -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.o
+	$(CC) -fPIC -c $(FFI_BUILD_DIR)/display_api_wrap.c $(PYTHON_CFLAGS) -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.o
 	$(CC) -shared -o $(PY_FFI_BUILD_DIR)/_display_api.so $(FFI_BUILD_DIR)/display_api_wrap.o -L$(abspath $(DISPLAY_BUILD_DIR)) -ldisplay_driver
 
 # ========================
@@ -281,6 +284,7 @@ install: all
 
 	# -- install env files --
 	@mkdir -p $(GLOBAL_CONFIG_DIR)
+	@chgrp seat_display_driver $(GLOBAL_CONFIG_DIR) && chmod 2750 $(GLOBAL_CONFIG_DIR)
 	@if [ ! -f $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG) ]; then \
 		echo "NX_WIDTH=$(NX_WIDTH)" > $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
 		echo "NX_HEIGHT=$(NX_HEIGHT)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
