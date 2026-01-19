@@ -12,6 +12,9 @@ readonly SOFT_RESET="-reset"
 readonly GLOBAL_CONFIG_DIR="/etc/seat-display-driver"
 readonly GLOBAL_CONFIG="display_env"
 readonly XAUTH_CONFIG="Xauthority"
+readonly GROUP="seat_display_driver" 
+
+umask 027
 
 # USER must set NX_WIDTH and NX_HEIGHT before running
 if [[ -z "$NX_WIDTH" || -z "$NX_HEIGHT" ]]; then
@@ -55,13 +58,16 @@ echo "Using nested display :${NESTED_DISPLAY}"
 
 echo "${NESTED_DISPLAY}" > "${TGT_IPC_FILE}"
 
-> "${GLOBAL_CONFIG_DIR}/${XAUTH_CONFIG}"
+: > "${GLOBAL_CONFIG_DIR}/${XAUTH_CONFIG}"
+
+# xauth writes the file and changes perms
 xauth -f "${GLOBAL_CONFIG_DIR}/${XAUTH_CONFIG}" add ":${NESTED_DISPLAY}" . $(mcookie --verbose)
+
+chgrp "${GROUP}" "${GLOBAL_CONFIG_DIR}/${XAUTH_CONFIG}"
+chmod 0640 "${GLOBAL_CONFIG_DIR}/${XAUTH_CONFIG}"
 
 echo "Starting Xnest... target server => ${DISPLAY}"
 echo "Options used for server : ${NESTED_DISPLAY_OPTIONS[*]}"
-
-set -x
 
 Xnest ":${NESTED_DISPLAY}" "${NESTED_DISPLAY_OPTIONS[@]}" &
 
