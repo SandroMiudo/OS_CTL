@@ -19,11 +19,13 @@ typedef enum _FrameBufferFillCommands {
 
 typedef uint8_t *frame_buffer_data;
 
-extern void fb_draw_image(fb_info_ptr fb, frame_buffer_data fb_data, int x0, int y0,
-                   uint32_t img_width, uint32_t img_height,
-                   const uint32_t *image);
+extern void fb_draw_image(fb_info_ptr fb, frame_buffer_data fb_data, 
+    unsigned int x0, unsigned int y0,
+    unsigned int img_width, unsigned int img_height,
+    const uint32_t *image);
 
-extern void fb_set_pixel(fb_info_ptr fb, frame_buffer_data fb_data, int x, int y, uint32_t color);          
+extern void fb_set_pixel(fb_info_ptr fb, frame_buffer_data fb_data, unsigned int x, 
+    unsigned int y, uint32_t color);          
 
 extern void fb_fill(fb_info_ptr fb, frame_buffer_data fb_data, uint32_t to);
 

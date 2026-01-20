@@ -14,7 +14,8 @@ static void fill_command(FrameBufferFillCommands comm, fb_info_ptr fb, frame_buf
     f[comm](fb, fb_data);
 }
 
-void fb_set_pixel(fb_info_ptr fb, frame_buffer_data fb_data, int x, int y, uint32_t color) {
+void fb_set_pixel(fb_info_ptr fb, frame_buffer_data fb_data, unsigned int x, 
+    unsigned int y, uint32_t color) {
     if (!fb || x < 0 || x >= fb->width || y < 0 || y >= fb->height) return;
 
     uint8_t *row_start = fb_data + y * fb->stride;
@@ -23,9 +24,10 @@ void fb_set_pixel(fb_info_ptr fb, frame_buffer_data fb_data, int x, int y, uint3
     *pixel = color;
 }
 
-void fb_draw_image(fb_info_ptr fb, frame_buffer_data fb_data, int x0, int y0,
-                   uint32_t img_width, uint32_t img_height,
-                   const uint32_t *image) {
+void fb_draw_image(fb_info_ptr fb, frame_buffer_data fb_data, 
+    unsigned int x0, unsigned int y0,
+    unsigned int img_width, unsigned int img_height,
+    const uint32_t *image) {
     if (!fb || !image) return;
 
     for (uint32_t y = 0; y < img_height; y++) {
