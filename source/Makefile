@@ -5,6 +5,7 @@ CC = gcc
 SWIG = swig
 CFLAGS = -Wall -Wextra -Wshadow -Wconversion -O2 \
 	     -fPIC \
+		 -Ilib \
          -Idisplay \
 		 -I.
 
@@ -98,6 +99,16 @@ $(info DISPLAY_DRIVER_SONAME = $(DISPLAY_DRIVER_SONAME))
 $(info LIB_DISPLAY_DRIVER_FILENAME = $(LIB_DISPLAY_DRIVER_FILENAME))
 
 # ========================
+# Static lib
+# ========================
+
+LIB_DIR := $(BUILD_DIR)/lib
+LIB_AR := $(LIB_DIR)/libd_globals.a
+
+LIB_SRC := $(wildcard lib/*.c)
+LIB_OBJ := $(LIB_SRC:lib/%.c=$(LIB_DIR)/%.o)
+
+# ========================
 # Display manager binary
 # ========================
 DISPLAY_SRC := display/display_manager.c
@@ -153,7 +164,19 @@ LOCAL_BIN = /usr/local/bin
 # ========================
 # Default target: build everything
 # ========================
-all: check-deps $(PROXY_BIN) $(SEAT_BINS) $(DISPLAY_DRIVER_LIB) $(DISPLAY_BIN) ffi
+all: check-deps $(LIB_AR) $(PROXY_BIN) $(SEAT_BINS) $(DISPLAY_DRIVER_LIB) $(DISPLAY_BIN) ffi
+
+# ========================
+# Build static lib
+# ========================
+$(LIB_DIR):
+	@mkdir -p $(LIB_DIR)
+
+$(LIB_AR): $(LIB_OBJ) 
+	ar rcs $@ $^
+
+$(LIB_DIR)/%.o: lib/%.c | $(LIB_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # ========================
 # Build proxy (main)
@@ -180,8 +203,8 @@ $(DISPLAY_BUILD_DIR):
 # ========================
 # Build display_driver
 # ========================
-$(DISPLAY_DRIVER_LIB): $(DISPLAY_DRIVER_SRC) $(GLOBAL_UTIL_SRC) | $(DISPLAY_BUILD_DIR)
-	$(CC) $(CFLAGS) $(PYTHON_CFLAGS) $^ $(LDFLAGS) $(PYTHON_LDFLAGS) -o $@
+$(DISPLAY_DRIVER_LIB): $(DISPLAY_DRIVER_SRC) $(GLOBAL_UTIL_SRC) $(LIB_AR) | $(DISPLAY_BUILD_DIR)
+	$(CC) $(CFLAGS) $(PYTHON_CFLAGS) $^ $(LDFLAGS) $(PYTHON_LDFLAGS) -L$(abspath $(dir $(LIB_AR))) -ld_globals -o $@
 	# Create SONAME and default symlink
 	ln -s $@ $(DISPLAY_DRIVER_SONAME)
 	ln -s $(DISPLAY_DRIVER_SONAME) $(DISPLAY_BUILD_DIR)/libdisplay_driver.so
@@ -213,9 +236,9 @@ ffi: python_ffi | $(DISPLAY_DRIVER_LIB) $(FFI_BUILD_DIR)
 # ========================
 python_ffi:
 	@mkdir -p $(PY_FFI_BUILD_DIR)
-	$(SWIG_PYTHON) $(SWIG_OPTIONS) -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.c -outdir $(PY_FFI_BUILD_DIR) $(PY_FFI_SRC)/$(SWIG_INTERFACE)
-	$(CC) -fPIC -c $(FFI_BUILD_DIR)/display_api_wrap.c $(PYTHON_CFLAGS) -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.o
-	$(CC) -shared -o $(PY_FFI_BUILD_DIR)/_display_api.so $(FFI_BUILD_DIR)/display_api_wrap.o -L$(abspath $(DISPLAY_BUILD_DIR)) -ldisplay_driver
+	$(SWIG_PYTHON) $(SWIG_OPTIONS) -Ilib -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.c -outdir $(PY_FFI_BUILD_DIR) $(PY_FFI_SRC)/$(SWIG_INTERFACE)
+	$(CC) -fPIC -c $(FFI_BUILD_DIR)/display_api_wrap.c $(PYTHON_CFLAGS) -Ilib -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.o
+	$(CC) -shared -o $(PY_FFI_BUILD_DIR)/_display_api.so $(FFI_BUILD_DIR)/display_api_wrap.o -L$(abspath $(DISPLAY_BUILD_DIR)) -ldisplay_driver -L$(abspath $(dir $(LIB_AR))) -ld_globals
 
 # ========================
 # Install everything to system paths
