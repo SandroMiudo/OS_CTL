@@ -4,8 +4,9 @@
 
 extern uint8_t xlib_init();
 extern void xlib_run();
-extern void xlib_draw_image(int x, int y, int width, int height, const uint32_t* buffer);
-extern void xlib_draw_pixel(int x, int y, uint32_t color);
+extern void xlib_draw_image(unsigned int x, unsigned int y, unsigned int width, 
+    unsigned int height, const uint32_t* buffer);
+extern void xlib_draw_pixel(unsigned int x, unsigned int y, uint32_t color);
 extern void xlib_clear_screen(uint8_t on);
 extern void xlib_fill_screen(uint32_t color);
 

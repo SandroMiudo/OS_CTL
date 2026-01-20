@@ -8,8 +8,9 @@ typedef struct DisplayDriver {
     uint8_t (*init_routine)(void);
     void (*run)(void);
     // Drawing functions
-    void (*draw_image)(int x, int y, int width, int height, const uint32_t* buffer);
-    void (*draw_pixel)(int x, int y, uint32_t color);
+    void (*draw_image)(unsigned int x, unsigned int y, unsigned int width, 
+        unsigned int height, const uint32_t* buffer);
+    void (*draw_pixel)(unsigned int x, unsigned int y, uint32_t color);
     void (*clear_screen)(uint8_t on);
     void (*fill_screen)(uint32_t color);
 
