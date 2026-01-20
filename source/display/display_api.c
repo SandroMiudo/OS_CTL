@@ -6,6 +6,10 @@
 #include <string.h> 
 #include "global_structs.h"
 #include "numpy_api.h"
+#include "pack.h"
+#include "endian.h"
+#include <stdlib.h>
+#include <malloc.h>
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -129,17 +133,83 @@ int display_query_height() {
     return -1;
 }
 
-void cmd_draw_image_set_buffer(cmd_draw_image_t *cmd, PyObject *obj) {
-    // Convert Python object to a contiguous NumPy array of uint32
-    
-    LOG("Py object = %p\n", obj);
-
+void cmd_draw_image_set_buffer_u8(cmd_draw_image_t *cmd, PyObject *obj) {
     assert(PyArray_API != NULL);
 
-    PyArrayObject *arr = (PyArrayObject*) PyArray_FROM_OTF(
-        obj,              // Python object assigned to the field
-        NPY_UINT32,          // Must be dtype uint32
-        NPY_ARRAY_IN_ARRAY | NPY_ARRAY_ENSUREARRAY // Must be C-contiguous & aligned; copy if not
+    PyArrayObject *arr = (PyArrayObject*)PyArray_FROM_OTF(
+        obj,
+        NPY_UINT8,
+        NPY_ARRAY_IN_ARRAY | NPY_ARRAY_ENSUREARRAY
+    );
+
+    if (!arr) {
+        PyErr_SetString(PyExc_TypeError, "Expected a numpy uint8 array");
+        PyErr_Print();
+        return;
+    }
+
+    // -------------------------
+    // Validate shape and type
+    // -------------------------
+    int ndim = PyArray_NDIM(arr);
+    if (ndim != 3) {
+        PyErr_SetString(PyExc_ValueError, "Expected a 3D numpy array (H,W,4)");
+        Py_DECREF(arr);
+        return;
+    }
+
+    npy_intp *shape = PyArray_SHAPE(arr);
+    if (shape[2] != 4) {
+        PyErr_SetString(PyExc_ValueError, "Expected 4 channels (RGBA)");
+        Py_DECREF(arr);
+        return;
+    }
+
+    if (PyArray_ITEMSIZE(arr) != 1) {
+        PyErr_SetString(PyExc_ValueError, "Expected uint8 array");
+        Py_DECREF(arr);
+        return;
+    }
+
+    // -------------------------
+    // Allocate aligned buffer
+    // -------------------------
+    npy_intp h = shape[0];
+    npy_intp w = shape[1];
+    size_t pixels = (size_t)h * (size_t)w;
+
+    uint32_t *buffer = memalign(sizeof(uint32_t), pixels * sizeof(uint32_t));
+
+    if (buffer == NULL) {
+        PyErr_SetString(PyExc_MemoryError, "Failed to allocate aligned buffer");
+        Py_DECREF(arr);
+        return;
+    }
+
+    // -------------------------
+    // Copy pixels (pack order)
+    // -------------------------
+    uint8_t *src = (uint8_t*)PyArray_DATA(arr);
+
+    const pack_ops_t* p_ops = pack_ops_by_idx(cmd->order);
+
+    pack_pixels(src, buffer, pixels, p_ops);
+
+    cmd->buffer = buffer;
+
+    // we don't need to hold the ref anymore, since we now handle it 
+    // on c side
+    Py_DECREF(arr);
+}
+
+void cmd_draw_image_set_buffer_u32(cmd_draw_image_t *cmd, 
+    PyObject *obj, endian_t endianness) {
+    assert(PyArray_API != NULL);
+
+    PyArrayObject *arr = (PyArrayObject*)PyArray_FROM_OTF(
+        obj,
+        NPY_UINT32,
+        NPY_ARRAY_IN_ARRAY | NPY_ARRAY_ENSUREARRAY
     );
 
     if (!arr) {
@@ -148,9 +218,48 @@ void cmd_draw_image_set_buffer(cmd_draw_image_t *cmd, PyObject *obj) {
         return;
     }
 
-    cmd->buffer = (uint32_t*)PyArray_DATA(arr);
+    // -------------------------
+    // Validate shape and type
+    // -------------------------
+    int ndim = PyArray_NDIM(arr);
+    if (ndim != 2) {
+        PyErr_SetString(PyExc_ValueError, "Expected a 2D numpy array (H,W)");
+        Py_DECREF(arr);
+        return;
+    }
 
-    // Keep array alive to prevent Python GC from freeing the memory
-    Py_XDECREF(cmd->__buffer_owner);
-    cmd->__buffer_owner = (PyObject*)arr;
+    if (PyArray_ITEMSIZE(arr) != 4) {
+        PyErr_SetString(PyExc_ValueError, "Expected uint32 array");
+        Py_DECREF(arr);
+        return;
+    }
+
+    npy_intp *shape = PyArray_SHAPE(arr);
+    npy_intp h = shape[0];
+    npy_intp w = shape[1];
+    size_t pixels = (size_t)h * (size_t)w;
+
+    // -------------------------
+    // Allocate aligned buffer
+    // -------------------------
+    uint32_t *buffer = memalign(sizeof(uint32_t), pixels * sizeof(uint32_t));
+    if (buffer == NULL) {
+        PyErr_SetString(PyExc_MemoryError, "Failed to allocate aligned buffer");
+        Py_DECREF(arr);
+        return;
+    }
+
+    // -------------------------
+    // Convert endianness to little endian : TODO : make it arch dependent !
+    // -------------------------
+    uint32_t *src = (uint32_t*)PyArray_DATA(arr);
+
+    if (endianness != HOST_ENDIAN) {
+        for (size_t i = 0; i < pixels; i++)
+            buffer[i] = to_little_endian(src[i]);
+    }
+
+    cmd->buffer = buffer;
+
+    Py_DECREF(arr);
 }

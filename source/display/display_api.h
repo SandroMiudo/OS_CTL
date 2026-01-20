@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <Python.h>
+#include "pixels.h"
 
 #define WHITE 0 // off
 #define BLACK 1 // on
@@ -21,18 +22,18 @@ typedef enum {
 
 // For DISPLAY_DRAW_IMAGE
 typedef struct {
-    int x;
-    int y;
-    int width;
-    int height;
+    unsigned int x;
+    unsigned int y;
+    unsigned int width;
+    unsigned int height;
     uint32_t* buffer;
-    PyObject *__buffer_owner; // private usage only
+    channel_order_t order;
 } cmd_draw_image_t;
 
 // For DISPLAY_SET_PIXEL
 typedef struct {
-    int x;
-    int y;
+    unsigned int x;
+    unsigned int y;
     uint32_t color;
 } cmd_set_pixel_t;
 
