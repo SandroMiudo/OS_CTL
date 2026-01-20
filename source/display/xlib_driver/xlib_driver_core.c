@@ -342,7 +342,9 @@ static int __get_shm_objects(fb_info_ptr* _fb_info, frame_buffer_data* fb_data) 
     return 0;
 }
 
-void xlib_draw_image(int x, int y, int width, int height, const uint32_t* buffer) {
+void xlib_draw_image(unsigned int x, unsigned int y, 
+    unsigned int width, unsigned int height, 
+    const uint32_t* buffer) {
     fb_info_ptr fb_info;
     frame_buffer_data fb_data;
 
@@ -354,7 +356,7 @@ void xlib_draw_image(int x, int y, int width, int height, const uint32_t* buffer
     fb_draw_image(fb_info, fb_data, x, y, width, height, buffer);
 }
 
-void xlib_draw_pixel(int x, int y, uint32_t color) {
+void xlib_draw_pixel(unsigned int x, unsigned int y, uint32_t color) {
     fb_info_ptr fb_info;
     frame_buffer_data fb_data;
 
