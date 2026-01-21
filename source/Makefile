@@ -139,6 +139,23 @@ SYSTEMD_SCRIPT_SRC := systemd/instance-display-generator.sh
 SYSTEMD_SCRIPT_TGT := $(basename $(notdir $(SYSTEMD_SCRIPT_SRC)))
 
 # ========================
+# General examples
+# ========================
+EXAMPLE_OUT_DIR := examples/bin
+EXAMPLE_SRC_DIR := examples/
+
+# ========================
+# C examples
+# ========================
+C_EXAMPLE_SRC_DIR := $(EXAMPLE_SRC_DIR)/c
+C_EXAMPLE_OUT_DIR := $(EXAMPLE_OUT_DIR)/c
+C_EXAMPLE_SRC := $(wildcard $(C_EXAMPLE_SRC_DIR)/*.c)
+
+C_EXAMPLE_OUT := $(patsubst $(C_EXAMPLE_SRC_DIR)/%.c, \
+                            $(C_EXAMPLE_OUT_DIR)/%, \
+                            $(C_EXAMPLE_SRC))
+
+# ========================
 # Install target locations
 # ========================
 INSTALL_ROOT_BIN = /usr/local/bin/seat_display_driver
@@ -159,12 +176,25 @@ LOCAL_BIN = /usr/local/bin
 # ========================
 # Phony targets
 # ========================
-.PHONY: all clean install check-deps ffi
+.PHONY: all clean install check-deps ffi example
+
+### TODO: for now ffi for all languages are build every time,
+# but this should not be the case -> make it language specific
 
 # ========================
-# Default target: build everything
+# Default target: build everything (without inluding examples)
 # ========================
 all: check-deps $(LIB_AR) $(PROXY_BIN) $(SEAT_BINS) $(DISPLAY_DRIVER_LIB) $(DISPLAY_BIN) ffi
+
+# ========================
+# build everything (inluding examples)
+# ========================
+example_all: example_c
+
+# ========================
+# build everything (inluding c examples)
+# ========================
+example_c: all $(C_EXAMPLE_OUT)
 
 # ========================
 # Build static lib
@@ -241,9 +271,16 @@ python_ffi:
 	$(CC) -shared -o $(PY_FFI_BUILD_DIR)/_display_api.so $(FFI_BUILD_DIR)/display_api_wrap.o -L$(abspath $(DISPLAY_BUILD_DIR)) -ldisplay_driver -L$(abspath $(dir $(LIB_AR))) -ld_globals
 
 # ========================
+# compile C examples
+# ========================
+$(C_EXAMPLE_OUT_DIR)/%: $(C_EXAMPLE_SRC_DIR)/%.c
+	@mkdir -p $(C_EXAMPLE_OUT_DIR)
+	$(CC) $(CFLAGS) $(PYTHON_CFLAGS) $< -L$(abspath $(DISPLAY_BUILD_DIR)) -ldisplay_driver -o $@
+
+# ========================
 # Install everything to system paths
 # ========================
-install: all
+install: example_all   # should actually contain the all depency
 	@echo "Installing binaries and supporting files..."
 
 	# -- assets --
@@ -357,6 +394,10 @@ clean-env:
 	@rm -rf $(GLOBAL_CONFIG_DIR)
 	@echo "-> Removed env."
 
+clean-examples:
+	@rm -rf $(EXAMPLE_OUT_DIR)
+	@echo "-> Removed examples."
+
 # ========================
 # Unlink system files
 # ========================
@@ -371,6 +412,11 @@ unlink-files:
 	@echo "-> Unlinked system files"
 
 # ========================
-# Clean all artifacts
+# Clean all artifacts(without examples)
 # ========================
-clean-all: clean-build clean-install unlink-files clean-env
+clean-all: clean-build clean-install unlink-files clean-env clean-examples #clean-examples should not be here !
+
+# ========================
+# Clean all artifacts(with examples)
+# ========================
+clean-all-e: clean-all clean-examples
