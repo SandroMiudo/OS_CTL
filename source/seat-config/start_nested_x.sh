@@ -45,11 +45,11 @@ NESTED_DISPLAY_OPTIONS=(
 #    NESTED_DISPLAY_OPTIONS+=(-nolisten "${protocol}")
 #done
 
-if [ "${DEBUG}" = "${DEBUG_ON}" ]; then
-    NESTED_DISPLAY_OPTIONS+=(
-        -sync
-    )
-fi
+# if [ "${DEBUG}" = "${DEBUG_ON}" ]; then
+#     NESTED_DISPLAY_OPTIONS+=(
+#         -sync
+#     )
+# fi
 
 TGT_IPC_FILE="/run/seat_display_driver/display_id"
 
