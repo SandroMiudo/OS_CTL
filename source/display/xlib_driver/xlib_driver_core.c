@@ -28,7 +28,6 @@ void obtain_display_info(int (*p)[4]);
 // Store Display* and Window globally for this driver module
 static Display *driver_display = NULL;
 static Window driver_window = 0;
-static fb_info global_fb = {};
 
 /* Shared non-Xlib logging helper: prints error details without calling Xlib. */
 static void xlib_log_error_details(const char *tag,
@@ -211,15 +210,19 @@ int xlib_run() {
     if (fb_data_sync == MAP_FAILED) {
         perror("mmap");
         return 1;
-    }        
+    }
+
+    // keep buffer pinned
+    if (mlock(fb_data_sync, sizeof(fb_info))) {
+        perror("error during mlock");
+        return 1;
+    }
 
     memset(fb_data_sync, '\0', fb_size);
 
-    global_fb = _global_fb;
-
-    strncpy(global_fb.name, _shared_memory_fb_data, sizeof(global_fb.name)-1);
-    global_fb.name[sizeof(global_fb.name)-1] = '\0';
-    global_fb.b_size = fb_size;
+    strncpy(_global_fb.name, _shared_memory_fb_data, sizeof(_global_fb.name)-1);
+    _global_fb.name[sizeof(_global_fb.name)-1] = '\0';
+    _global_fb.b_size = fb_size;
 
     if ((fd = open_shm_w_group_mask(_shared_memory_fb_info,
         _group_name, O_CREAT | O_RDWR, S_IRWXO | S_IXGRP | S_IXUSR)) == -1) {
@@ -234,10 +237,10 @@ int xlib_run() {
     fb_info_ptr fb_info_sync = (fb_info_ptr)mmap(NULL, sizeof(fb_info), PROT_READ | PROT_WRITE,
         MAP_SHARED, fd, 0);
 
-    *fb_info_sync = global_fb;
+    *fb_info_sync = _global_fb;
 
     dump_screen_context(&info_data_arr);
-    dump_frame_buffer_context(&global_fb);
+    dump_frame_buffer_context(fb_info_sync);
 
     LOG("[xlib_run] creating XImage (w=%d h=%d depth=%d)...\n", w, h, d);
     XImage* driver_ximage = XCreateImage(
@@ -250,8 +253,11 @@ int xlib_run() {
         w,
         h,
         32,
-        global_fb.stride
+        _global_fb.stride
     );
+
+    // unmap fb_info after writing data to it
+    munmap(fb_info_sync, sizeof(fb_info));
 
     if (!driver_ximage) {
         fprintf(stderr, "[xlib_run] ERROR: Failed to create XImage.\n");
@@ -262,18 +268,18 @@ int xlib_run() {
 
     LOG("[xlib_run] obtaining GC...\n");
     GC gc = DefaultGC(driver_display, s);
-    if (gc == NULL) {
+    if (gc == NULL)
         fprintf(stderr, "[xlib_run] WARNING: DefaultGC returned NULL.\n");
-    } else {
+    else
         printf("[xlib_run] DefaultGC acquired.\n");
-    }
-
+    
     // Target FPS
     const int target_fps = 60;
     const int frame_delay_us = 1000000 / target_fps;
 
     LOG("[xlib_run] entering render loop (target %d FPS).\n", target_fps);
     unsigned long frame_counter = 0;
+
     while (1) {
         // Update the window with the current framebuffer
         XPutImage(driver_display, driver_window, gc, driver_ximage,
@@ -284,7 +290,7 @@ int xlib_run() {
         // Flush the X output buffer and synchronously process errors/events
         XFlush(driver_display);
         // Process any pending errors/events now
-        XSync(driver_display, False);
+        // XSync(driver_display, False);
 
         // Log every 300 frames to avoid spamming logs
         if ((frame_counter++ % 300) == 0) {
@@ -300,6 +306,11 @@ int xlib_run() {
     // Cleanup (not reached in infinite loop)
     printf("[xlib_run] cleaning up XImage and framebuffer.\n");
     XDestroyImage(driver_ximage);
+
+    // normally its enough to just unmap the virtual pages, and this would
+    // automatically skip the unlocking step
+    munlock(fb_data_sync, fb_size);
+    munmap(fb_data_sync, fb_size);
 
     /* Ensure server processed all requests and close connection cleanly */
     XSync(driver_display, False);
@@ -328,6 +339,8 @@ static int __get_shm_objects(fb_info_ptr* _fb_info, frame_buffer_data* fb_data) 
     fb_info_ptr fb_info_sync = (fb_info_ptr)mmap(NULL, sizeof(fb_info), PROT_READ | PROT_WRITE,
         MAP_SHARED, fd, 0);
 
+    close(fd);
+
     if ((fd = shm_open(_shared_memory_fb_data, O_RDWR, 0)) == -1) {
         perror("error during shm_open");
         return 1;
@@ -336,10 +349,17 @@ static int __get_shm_objects(fb_info_ptr* _fb_info, frame_buffer_data* fb_data) 
     frame_buffer_data fb_data_sync = (frame_buffer_data)mmap(NULL, fb_info_sync->b_size, PROT_READ | PROT_WRITE,
             MAP_SHARED | MAP_POPULATE, fd, 0);
 
+    close(fd);
+
     *_fb_info = fb_info_sync;
     *fb_data = fb_data_sync;
 
     return 0;
+}
+
+static void __release_shm_objects(fb_info_ptr fb_info, frame_buffer_data fb_data) {
+    munmap(fb_data, fb_info->b_size);
+    munmap(fb_info, sizeof(fb_info));
 }
 
 void xlib_draw_image(unsigned int x, unsigned int y, 
@@ -354,6 +374,8 @@ void xlib_draw_image(unsigned int x, unsigned int y,
     LOG("[xlib_driver_draw_image]\n");
 
     fb_draw_image(fb_info, fb_data, x, y, width, height, buffer);
+
+    __release_shm_objects(fb_info, fb_data);
 }
 
 void xlib_draw_pixel(unsigned int x, unsigned int y, uint32_t color) {
@@ -366,6 +388,8 @@ void xlib_draw_pixel(unsigned int x, unsigned int y, uint32_t color) {
     LOG("[xlib_driver_draw_pixel]\n");
 
     fb_set_pixel(fb_info, fb_data, x, y, color);
+
+    __release_shm_objects(fb_info, fb_data);
 }
 
 void xlib_clear_screen(uint8_t on) {
@@ -378,6 +402,8 @@ void xlib_clear_screen(uint8_t on) {
     LOG("[xlib_driver_clear_screen]\n");
 
     fb_clear(fb_info, fb_data, on);
+
+    __release_shm_objects(fb_info, fb_data);
 }
 
 void xlib_fill_screen(uint32_t color) {
@@ -390,6 +416,8 @@ void xlib_fill_screen(uint32_t color) {
     LOG("[xlib_driver_fill_screen]\n");
 
     fb_fill(fb_info, fb_data, color);
+
+    __release_shm_objects(fb_info, fb_data);
 }
 
 Display* xlib_resolution_prop_query() {
