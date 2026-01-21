@@ -53,7 +53,7 @@ void display_draw_image(cmd_draw_image_t* cmd, display_flags_t flags,
         status = (flags & DISPLAY_WNO) ? 
             pthread_mutex_trylock(&lock) : 
             pthread_mutex_lock(&lock);
-        if(status) {
+        if(status && (cb != NULL)) {
             cb(msg, status);
             return;
         }
@@ -74,7 +74,7 @@ void display_set_pixel(cmd_set_pixel_t* cmd, display_flags_t flags,
         status = (flags & DISPLAY_WNO) ? 
             pthread_mutex_trylock(&lock) : 
             pthread_mutex_lock(&lock);
-        if(status) {
+        if(status && (cb != NULL)) {
             cb(msg, status);
             return;
         }
@@ -91,7 +91,7 @@ void display_clear_screen(cmd_clear_screen_t* cmd, display_flags_t flags,
         status = (flags & DISPLAY_WNO) ? 
             pthread_mutex_trylock(&lock) : 
             pthread_mutex_lock(&lock);
-        if(status) {
+        if(status && (cb != NULL)) {
             cb(msg, status);
             return;
         }
@@ -108,7 +108,7 @@ void display_fill_screen(cmd_fill_screen_t* cmd, display_flags_t flags,
         status = (flags & DISPLAY_WNO) ? 
             pthread_mutex_trylock(&lock) : 
             pthread_mutex_lock(&lock);
-        if(status) {
+        if(status && (cb != NULL)) {
             cb(msg, status);
             return;
         }
