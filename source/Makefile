@@ -101,7 +101,6 @@ $(info LIB_DISPLAY_DRIVER_FILENAME = $(LIB_DISPLAY_DRIVER_FILENAME))
 # ========================
 # Static lib
 # ========================
-
 LIB_DIR := $(BUILD_DIR)/lib
 LIB_AR := $(LIB_DIR)/libd_globals.a
 
@@ -118,14 +117,12 @@ DISPLAY_BIN := $(DISPLAY_BUILD_DIR)/display
 # ========================
 # FFI variables
 # ========================
-
 FFI_BUILD_DIR := $(BUILD_DIR)/ffi
 PY_FFI_BUILD_DIR := $(FFI_BUILD_DIR)/python
 
 # ========================
 # Python FFI
 # ========================
-
 PY_FFI_SRC := ffi/python
 
 # ========================
@@ -141,8 +138,8 @@ SYSTEMD_SCRIPT_TGT := $(basename $(notdir $(SYSTEMD_SCRIPT_SRC)))
 # ========================
 # General examples
 # ========================
-EXAMPLE_OUT_DIR := examples/bin
-EXAMPLE_SRC_DIR := examples/
+EXAMPLE_OUT_DIR := $(BUILD_DIR)/examples
+EXAMPLE_SRC_DIR := examples
 
 # ========================
 # C examples
@@ -154,6 +151,12 @@ C_EXAMPLE_SRC := $(wildcard $(C_EXAMPLE_SRC_DIR)/*.c)
 C_EXAMPLE_OUT := $(patsubst $(C_EXAMPLE_SRC_DIR)/%.c, \
                             $(C_EXAMPLE_OUT_DIR)/%, \
                             $(C_EXAMPLE_SRC))
+
+# ========================
+# Rust examples
+# ========================
+RUST_EXAMPLE_OUT_DIR := $(EXAMPLE_OUT_DIR)/rust
+RUST_MANIFEST_PATH := $(EXAMPLE_SRC_DIR)/rust/Cargo.toml
 
 # ========================
 # Install target locations
@@ -176,7 +179,7 @@ LOCAL_BIN = /usr/local/bin
 # ========================
 # Phony targets
 # ========================
-.PHONY: all clean install check-deps ffi example
+.PHONY: all clean install check-deps ffi python_ffi rust_ffi example_all example_c example_rust
 
 ### TODO: for now ffi for all languages are build every time,
 # but this should not be the case -> make it language specific
@@ -184,17 +187,22 @@ LOCAL_BIN = /usr/local/bin
 # ========================
 # Default target: build everything (without inluding examples)
 # ========================
-all: check-deps $(LIB_AR) $(PROXY_BIN) $(SEAT_BINS) $(DISPLAY_DRIVER_LIB) $(DISPLAY_BIN) ffi
+all: check-deps $(LIB_AR) $(PROXY_BIN) $(SEAT_BINS) $(DISPLAY_DRIVER_LIB) $(DISPLAY_BIN) ffi rust_ffi
 
 # ========================
-# build everything (inluding examples)
+# build examples
 # ========================
-example_all: example_c
+example_all: example_c example_rust
 
 # ========================
-# build everything (inluding c examples)
+# build only c examples
 # ========================
-example_c: all $(C_EXAMPLE_OUT)
+example_c: $(C_EXAMPLE_OUT)
+
+# ========================
+# build only rust examples
+# ========================
+example_rust: rust_ffi
 
 # ========================
 # Build static lib
@@ -251,15 +259,24 @@ $(DISPLAY_BIN): $(DISPLAY_SRC) | $(DISPLAY_BUILD_DIR) $(DISPLAY_DRIVER_LIB)
 	@echo "Built display_manager -> $@"
 
 # ========================
+# Build out directories
+# ========================
+$(RUST_EXAMPLE_OUT_DIR):
+	@mkdir -p $(RUST_EXAMPLE_OUT_DIR)
+
+$(C_EXAMPLE_OUT_DIR):
+	@mkdir -p $(C_EXAMPLE_OUT_DIR)
+
+# ========================
 # Build ffi directory
 # ========================
 $(FFI_BUILD_DIR):
 	@mkdir -p $(FFI_BUILD_DIR)
-
+	
 # ========================
 # FFI
 # ========================
-ffi: python_ffi | $(DISPLAY_DRIVER_LIB) $(FFI_BUILD_DIR)
+ffi: python_ffi | $(DISPLAY_DRIVER_LIB) $(FFI_BUILD_DIR) $(RUST_EXAMPLE_OUT_DIR) $(C_EXAMPLE_OUT_DIR)
 	
 # ========================
 # Python FFI
@@ -273,14 +290,19 @@ python_ffi:
 # ========================
 # compile C examples
 # ========================
-$(C_EXAMPLE_OUT_DIR)/%: $(C_EXAMPLE_SRC_DIR)/%.c
-	@mkdir -p $(C_EXAMPLE_OUT_DIR)
+$(C_EXAMPLE_OUT_DIR)/%: $(C_EXAMPLE_SRC_DIR)/%.c | $(DISPLAY_BUILD_DIR) $(DISPLAY_DRIVER_LIB)
 	$(CC) $(CFLAGS) $(PYTHON_CFLAGS) $< -L$(abspath $(DISPLAY_BUILD_DIR)) -ldisplay_driver -o $@
+
+# ========================
+# compile Rust examples
+# ========================
+rust_ffi: | $(DISPLAY_BUILD_DIR) $(DISPLAY_DRIVER_LIB)
+	PATH=$(HOME)/.cargo/bin:$$PATH cargo build --target-dir $(RUST_EXAMPLE_OUT_DIR) --bins --release --manifest-path $(RUST_MANIFEST_PATH)
 
 # ========================
 # Install everything to system paths
 # ========================
-install: example_all   # should actually contain the all depency
+install: all
 	@echo "Installing binaries and supporting files..."
 
 	# -- assets --
@@ -414,9 +436,4 @@ unlink-files:
 # ========================
 # Clean all artifacts(without examples)
 # ========================
-clean-all: clean-build clean-install unlink-files clean-env clean-examples #clean-examples should not be here !
-
-# ========================
-# Clean all artifacts(with examples)
-# ========================
-clean-all-e: clean-all clean-examples
+clean-all: clean-build clean-install unlink-files clean-env
