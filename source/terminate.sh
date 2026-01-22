@@ -1,9 +1,5 @@
 #! /bin/bash
 
-sudo make -C source clean-all
+SEAT_DISPLAY_DRIVER_CWD="${SEAT_DISPLAY_DRIVER_CWD:-${HOME}/OS_CTL}"
 
-sudo systemctl stop instance-1-display.service
-sudo systemctl stop instance-2-display.service
-
-sudo systemctl stop seat-display-transient-instance-1.service
-sudo systemctl stop seat-display-transient-instance-2.service
+source "${SEAT_DISPLAY_DRIVER_CWD}"/source/seat_display_driver_exit.rc

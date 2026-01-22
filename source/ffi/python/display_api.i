@@ -2,33 +2,54 @@
 
 %{
 #include "display_api.h"
-#include <numpy/arrayobject.h>
+#include "numpy_api.h"
+#include "endian.h"
+#include "pixels.h"
+#include <Python.h>
+
+extern void display_cb_verbose(char* msg, int status);
+extern void display_cb_log_wo(char* _, int status);
+extern void display_cb_log_u_only(char* msg, int _);
+extern void display_cb_non(char* msg, int status);
+
+extern void cmd_draw_image_set_buffer_u8(cmd_draw_image_t *cmd, PyObject *obj);
+extern void cmd_draw_image_set_buffer_u32(cmd_draw_image_t *cmd, PyObject *obj, endian_t endianness);
 %}
+
+%ignore cmd_draw_image_t::buffer; // custom handling
+%ignore endian_native;
+%ignore endian_swap;
+%ignore to_little_endian;
+%ignore to_little_endian16;
+%ignore channel_indices_t;
+%ignore get_channel_indices;
 
 %include "stdint.i"
 %include "display_api.h"
+%include "endian.h"
+%include "pixels.h"
 
 %init %{
-import_array();
+    import_array();
+    if (PyArray_API == NULL) {
+        PyErr_SetString(PyExc_ImportError, "numpy.core.multiarray failed to import");
+    }
 %}
 
-%typemap(memberin) const uint32_t* cmd_draw_image_t::buffer {
-    // Convert Python object to a contiguous NumPy array of uint32
-    PyArrayObject *arr = (PyArrayObject*) PyArray_FROM_OTF(
-        $input,              // Python object assigned to the field
-        NPY_UINT32,          // Must be dtype uint32
-        NPY_ARRAY_IN_ARRAY   // Must be C-contiguous & aligned
-    );
-    if (!arr) {
-        SWIG_exception_fail(SWIG_TypeError,
-                            "Expected a NumPy array of dtype uint32");
+%extend cmd_draw_image_t {
+    void set_buffer_u8(PyObject *obj) {
+        cmd_draw_image_set_buffer_u8($self, obj);
     }
 
-    // Assign raw pointer to the struct field
-    $1 = (const uint32_t*) PyArray_DATA(arr);
-
-    // Keep array alive to prevent Python GC from freeing the memory
-    Py_INCREF(arr);
-    SWIG_Python_AppendOutput($input,
-        SWIG_NewPointerObj((void*)arr, SWIGTYPE_p_PyArrayObject, 0));
+    void set_buffer_u32(PyObject *obj, endian_t endianness) {
+        cmd_draw_image_set_buffer_u32($self, obj, endianness);
+    }
 }
+
+// TODO: property binding %property(cmd_draw_image_t, buffer=set_buffer); 
+
+// callback functions for display api
+%constant void display_cb_verbose(char* msg, int status);
+%constant void display_cb_log_wo(char* _, int status);
+%constant void display_cb_log_u_only(char* msg, int _);
+%constant void display_cb_non(char* msg, int status);

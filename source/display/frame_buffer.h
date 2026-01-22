@@ -1,26 +1,41 @@
 #ifndef FRAME_BUFFER
 #define FRAME_BUFFER
 #include <stdint.h>
+#include <stddef.h>
 
 typedef struct _fb_info {
     uint32_t width;
     uint32_t height;
     uint32_t stride;    // bytes per row
     uint32_t bpp;       // bytes per pixel (4 for ARGB)
-    uint8_t *buffer;    // mmap'd pointer
+    char name [64];  // associated shared memory object
+    size_t b_size;
 } fb_info, *fb_info_ptr;
 
-extern void fb_draw_image(fb_info *fb, int x0, int y0,
-                   uint32_t img_width, uint32_t img_height,
-                   const uint32_t *image);
+typedef enum _FrameBufferFillCommands {
+    WHITE_OUT,
+    BLACK_OUT,
+} FrameBufferFillCommands;
 
-extern void fb_set_pixel(fb_info *fb, int x, int y, uint32_t color);          
+typedef uint8_t *frame_buffer_data;
+
+extern void fb_draw_image(fb_info_ptr fb, frame_buffer_data fb_data, 
+    unsigned int x0, unsigned int y0,
+    unsigned int img_width, unsigned int img_height,
+    const uint32_t *image);
+
+extern void fb_set_pixel(fb_info_ptr fb, frame_buffer_data fb_data, unsigned int x, 
+    unsigned int y, uint32_t color);          
+
+extern void fb_fill(fb_info_ptr fb, frame_buffer_data fb_data, uint32_t to);
+
+extern void fb_clear(fb_info_ptr fb, frame_buffer_data fb_data, uint8_t on);
 
 #define RGB_BPP 3
 #define ARGB_BPP RGB_BPP + 1
 
 #define FRAME_BUFFER_INFO(_width, _height, _stride, _bpp) \
-    (fb_info){ .width = (_width), .height = (_height), .stride = (_stride), .bpp = (_bpp), .buffer = (NULL) }
+    (fb_info){ .width = (_width), .height = (_height), .stride = (_stride), .bpp = (_bpp), .name = {'\0'}, .b_size = 0 }
 
     // _depth & _pad are in bits per pixel
 #define FRAME_BUFFER_INFO_W_PAD(_name, _width, _height, _depth, _pad) \
@@ -46,10 +61,5 @@ extern void fb_set_pixel(fb_info *fb, int x, int y, uint32_t color);
          b = (type)((arr)[WIDTH_INFO]),  \
          c = (type)((arr)[HEIGHT_INFO]), \
          d = (type)((arr)[DEPTH_INFO]);
-
-typedef enum _FrameBufferFillCommands {
-    WHITE_OUT,
-    BLACK_OUT,
-} FrameBufferFillCommands;
 
 #endif

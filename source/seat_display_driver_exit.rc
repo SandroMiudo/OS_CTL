@@ -1,0 +1,11 @@
+sudo groupdel -f seat_display_driver
+
+sudo make -C "${SEAT_DISPLAY_DRIVER_CWD}/source" clean-all
+
+sudo systemctl stop instance-1-display.service
+sudo systemctl stop instance-2-display.service
+
+sudo systemctl stop seat-display-transient-instance-1.service
+sudo systemctl stop seat-display-transient-instance-2.service
+
+sudo systemctl reset-failed

@@ -8,6 +8,10 @@
 #include <string.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <grp.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+#include <sys/stat.h>        /* For mode constants */
 
 // relpath must be a direct succesor to rootpath
 int mkdir_direct(const char *rootpath, const char *relpath, mode_t mode){
@@ -87,4 +91,64 @@ pid_t find_pid_by_name(const char *name) {
 
     closedir(proc);
     return -1;  // no match found
+}
+
+int open_shm_w_group(const char *shm_name,
+                        const char *group_name,
+                        int flags,
+                        mode_t mode) {
+
+    int fd = shm_open(shm_name, flags, mode);
+    if (fd == -1) {
+        perror("error during shm_open");
+        return -1;
+    }
+
+    struct group *grp = getgrnam(group_name);
+
+    if (!grp) {
+        perror("error during getgrnam");
+        close(fd);
+        return -1;
+    }
+
+    if (fchown(fd, -1, grp->gr_gid) == -1) {
+        perror("error during fchown");
+        close(fd);
+        return -1;
+    }
+
+    return fd;
+}
+
+int open_shm_w_group_mask(const char *shm_name,
+                        const char *group_name,
+                        int flags,
+                        mode_t mask) {
+
+    mode_t old_mask = umask(mask);
+
+    int fd = shm_open(shm_name, flags, S_IRWXU | S_IRWXG | S_IRWXO);
+    if (fd == -1) {
+        perror("error during shm_open");
+        return -1;
+    }
+
+    umask(old_mask);
+
+    struct group *grp = getgrnam(group_name);
+
+    if (!grp) {
+        perror("error during getgrnam");
+        close(fd);
+        return -1;
+    }
+
+    if (fchown(fd, -1, grp->gr_gid) == -1) {
+        perror("error during fchown");
+        close(fd);
+        return -1;
+    }
+
+    return fd;
 }

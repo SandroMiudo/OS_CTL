@@ -3,12 +3,13 @@
 # ========================
 CC = gcc
 SWIG = swig
-CFLAGS = -Wall -O2 \
+CFLAGS = -Wall -Wextra -Wshadow -Wconversion -O2 \
 	     -fPIC \
+		 -Ilib \
          -Idisplay \
 		 -I.
 
-LDFLAGS = -shared -Wl,-soname,$(DISPLAY_DRIVER_SONAME)
+LDFLAGS = -shared -Wl,-soname,$(DISPLAY_DRIVER_SONAME) -pthread
 
 VERSION = 1.0.0
 
@@ -19,6 +20,9 @@ DISPLAY_DRIVER ?= XLIB
 
 NX_HEIGHT ?= 1080
 NX_WIDTH ?= 1920
+
+PYTHON_CFLAGS = $(shell python3-config --includes) -Iinclude/python
+PYTHON_LDFLAGS = $(shell python3-config --ldflags --embed)
 
 ifeq ($(DISPLAY_DRIVER), $(DISPLAY_DRIVER_DRM))
 CFLAGS += -DDISPLAY_DRIVER_DRM $(shell pkg-config --cflags-only-I libdrm) -Idisplay/drm_driver
@@ -35,7 +39,7 @@ endif
 SWIG_INTERFACE := display_api.i
 SWIG_PYTHON := $(SWIG) -python
 SWIG_RUST   := $(SWIG) -rust
-SWIG_OPTIONS := -Wall
+SWIG_OPTIONS := -Wall # -debug-tmused 
 
 GLOBAL_CONFIG_DIR := /etc/seat-display-driver
 GLOBAL_CONFIG := display_env
@@ -95,6 +99,15 @@ $(info DISPLAY_DRIVER_SONAME = $(DISPLAY_DRIVER_SONAME))
 $(info LIB_DISPLAY_DRIVER_FILENAME = $(LIB_DISPLAY_DRIVER_FILENAME))
 
 # ========================
+# Static lib
+# ========================
+LIB_DIR := $(BUILD_DIR)/lib
+LIB_AR := $(LIB_DIR)/libd_globals.a
+
+LIB_SRC := $(wildcard lib/*.c)
+LIB_OBJ := $(LIB_SRC:lib/%.c=$(LIB_DIR)/%.o)
+
+# ========================
 # Display manager binary
 # ========================
 DISPLAY_SRC := display/display_manager.c
@@ -104,14 +117,12 @@ DISPLAY_BIN := $(DISPLAY_BUILD_DIR)/display
 # ========================
 # FFI variables
 # ========================
-
 FFI_BUILD_DIR := $(BUILD_DIR)/ffi
 PY_FFI_BUILD_DIR := $(FFI_BUILD_DIR)/python
 
 # ========================
 # Python FFI
 # ========================
-
 PY_FFI_SRC := ffi/python
 
 # ========================
@@ -123,6 +134,29 @@ SYSTEMD_UNITS := \
 
 SYSTEMD_SCRIPT_SRC := systemd/instance-display-generator.sh
 SYSTEMD_SCRIPT_TGT := $(basename $(notdir $(SYSTEMD_SCRIPT_SRC)))
+
+# ========================
+# General examples
+# ========================
+EXAMPLE_OUT_DIR := $(BUILD_DIR)/examples
+EXAMPLE_SRC_DIR := examples
+
+# ========================
+# C examples
+# ========================
+C_EXAMPLE_SRC_DIR := $(EXAMPLE_SRC_DIR)/c
+C_EXAMPLE_OUT_DIR := $(EXAMPLE_OUT_DIR)/c
+C_EXAMPLE_SRC := $(wildcard $(C_EXAMPLE_SRC_DIR)/*.c)
+
+C_EXAMPLE_OUT := $(patsubst $(C_EXAMPLE_SRC_DIR)/%.c, \
+                            $(C_EXAMPLE_OUT_DIR)/%, \
+                            $(C_EXAMPLE_SRC))
+
+# ========================
+# Rust examples
+# ========================
+RUST_EXAMPLE_OUT_DIR := $(EXAMPLE_OUT_DIR)/rust
+RUST_MANIFEST_PATH := $(EXAMPLE_SRC_DIR)/rust/Cargo.toml
 
 # ========================
 # Install target locations
@@ -145,12 +179,42 @@ LOCAL_BIN = /usr/local/bin
 # ========================
 # Phony targets
 # ========================
-.PHONY: all clean install check-deps ffi
+.PHONY: all clean install check-deps ffi python_ffi rust_ffi example_all example_c example_rust
+
+### TODO: for now ffi for all languages are build every time,
+# but this should not be the case -> make it language specific
 
 # ========================
-# Default target: build everything
+# Default target: build everything (without inluding examples)
 # ========================
-all: check-deps $(PROXY_BIN) $(SEAT_BINS) $(DISPLAY_DRIVER_LIB) $(DISPLAY_BIN) ffi
+all: check-deps $(LIB_AR) $(PROXY_BIN) $(SEAT_BINS) $(DISPLAY_DRIVER_LIB) $(DISPLAY_BIN) ffi rust_ffi
+
+# ========================
+# build examples
+# ========================
+example_all: example_c example_rust
+
+# ========================
+# build only c examples
+# ========================
+example_c: $(C_EXAMPLE_OUT)
+
+# ========================
+# build only rust examples
+# ========================
+example_rust: rust_ffi
+
+# ========================
+# Build static lib
+# ========================
+$(LIB_DIR):
+	@mkdir -p $(LIB_DIR)
+
+$(LIB_AR): $(LIB_OBJ) 
+	ar rcs $@ $^
+
+$(LIB_DIR)/%.o: lib/%.c | $(LIB_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # ========================
 # Build proxy (main)
@@ -177,10 +241,10 @@ $(DISPLAY_BUILD_DIR):
 # ========================
 # Build display_driver
 # ========================
-$(DISPLAY_DRIVER_LIB): $(DISPLAY_DRIVER_SRC) | $(DISPLAY_BUILD_DIR)
-	$(CC) $(CFLAGS) $(DISPLAY_DRIVER_SRC) $(LDFLAGS) -o $@
+$(DISPLAY_DRIVER_LIB): $(DISPLAY_DRIVER_SRC) $(GLOBAL_UTIL_SRC) $(LIB_AR) | $(DISPLAY_BUILD_DIR)
+	$(CC) $(CFLAGS) $(PYTHON_CFLAGS) $^ $(LDFLAGS) $(PYTHON_LDFLAGS) -L$(abspath $(dir $(LIB_AR))) -ld_globals -o $@
 	# Create SONAME and default symlink
-	ln -s $@ $(DISPLAY_DRIVER_SONAME) # todo : this is an unecassry link
+	ln -s $@ $(DISPLAY_DRIVER_SONAME)
 	ln -s $(DISPLAY_DRIVER_SONAME) $(DISPLAY_BUILD_DIR)/libdisplay_driver.so
 
 	@echo "Built lib-display_driver -> $@"
@@ -191,28 +255,49 @@ $(info $(dir $(DISPLAY_DRIVER_LIB)))
 # Build display_manager
 # ========================
 $(DISPLAY_BIN): $(DISPLAY_SRC) | $(DISPLAY_BUILD_DIR) $(DISPLAY_DRIVER_LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -L$(abspath $(dir $(DISPLAY_DRIVER_LIB))) -ldisplay_driver -Wl,-rpath=$(abspath $(dir $(DISPLAY_DRIVER_LIB)))
+	$(CC) $(CFLAGS) $(PYTHON_CFLAGS) -o $@ $^ -L$(abspath $(dir $(DISPLAY_DRIVER_LIB))) -ldisplay_driver
 	@echo "Built display_manager -> $@"
+
+# ========================
+# Build out directories
+# ========================
+$(RUST_EXAMPLE_OUT_DIR):
+	@mkdir -p $(RUST_EXAMPLE_OUT_DIR)
+
+$(C_EXAMPLE_OUT_DIR):
+	@mkdir -p $(C_EXAMPLE_OUT_DIR)
 
 # ========================
 # Build ffi directory
 # ========================
 $(FFI_BUILD_DIR):
 	@mkdir -p $(FFI_BUILD_DIR)
-
+	
 # ========================
 # FFI
 # ========================
-ffi: python_ffi | $(DISPLAY_DRIVER_LIB) $(FFI_BUILD_DIR)
+ffi: python_ffi | $(DISPLAY_DRIVER_LIB) $(FFI_BUILD_DIR) $(RUST_EXAMPLE_OUT_DIR) $(C_EXAMPLE_OUT_DIR)
 	
 # ========================
 # Python FFI
 # ========================
 python_ffi:
 	@mkdir -p $(PY_FFI_BUILD_DIR)
-	$(SWIG_PYTHON) $(SWIG_OPTIONS) -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.c -outdir $(PY_FFI_BUILD_DIR) $(PY_FFI_SRC)/$(SWIG_INTERFACE)
-	$(CC) -fPIC -c $(FFI_BUILD_DIR)/display_api_wrap.c $(shell python3-config --includes) -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.o
-	$(CC) -shared -o $(PY_FFI_BUILD_DIR)/_display_api.so $(FFI_BUILD_DIR)/display_api_wrap.o -L$(abspath $(DISPLAY_BUILD_DIR)) -ldisplay_driver
+	$(SWIG_PYTHON) $(SWIG_OPTIONS) -Ilib -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.c -outdir $(PY_FFI_BUILD_DIR) $(PY_FFI_SRC)/$(SWIG_INTERFACE)
+	$(CC) -fPIC -c $(FFI_BUILD_DIR)/display_api_wrap.c $(PYTHON_CFLAGS) -Ilib -Idisplay -o $(FFI_BUILD_DIR)/display_api_wrap.o
+	$(CC) -shared -o $(PY_FFI_BUILD_DIR)/_display_api.so $(FFI_BUILD_DIR)/display_api_wrap.o -L$(abspath $(DISPLAY_BUILD_DIR)) -ldisplay_driver -L$(abspath $(dir $(LIB_AR))) -ld_globals
+
+# ========================
+# compile C examples
+# ========================
+$(C_EXAMPLE_OUT_DIR)/%: $(C_EXAMPLE_SRC_DIR)/%.c | $(DISPLAY_BUILD_DIR) $(DISPLAY_DRIVER_LIB)
+	$(CC) $(CFLAGS) $(PYTHON_CFLAGS) $< -L$(abspath $(DISPLAY_BUILD_DIR)) -ldisplay_driver -o $@
+
+# ========================
+# compile Rust examples
+# ========================
+rust_ffi: | $(DISPLAY_BUILD_DIR) $(DISPLAY_DRIVER_LIB)
+	PATH=$(HOME)/.cargo/bin:$$PATH cargo build --target-dir $(RUST_EXAMPLE_OUT_DIR) --bins --release --manifest-path $(RUST_MANIFEST_PATH)
 
 # ========================
 # Install everything to system paths
@@ -281,11 +366,18 @@ install: all
 
 	# -- install env files --
 	@mkdir -p $(GLOBAL_CONFIG_DIR)
+	@chgrp seat_display_driver $(GLOBAL_CONFIG_DIR) && chmod 2750 $(GLOBAL_CONFIG_DIR)
 	@if [ ! -f $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG) ]; then \
 		echo "NX_WIDTH=$(NX_WIDTH)" > $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
 		echo "NX_HEIGHT=$(NX_HEIGHT)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
 		echo "DISPLAY=$$DISPLAY" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
 		echo "XAUTHORITY=$$XAUTHORITY" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "DEBUG=$(DEBUG)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "BORDER_WIDTH=$(BORDER_WIDTH)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "NX_OFF_X=$(NX_OFF_X)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "NX_OFF_Y=$(NX_OFF_Y)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "DEBUG=$(DEBUG)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
+		echo "MAX_CLIENTS=$(MAX_CLIENTS)" >> $(GLOBAL_CONFIG_DIR)/$(GLOBAL_CONFIG); \
 	fi
 
 	@echo "Install complete."
@@ -324,6 +416,10 @@ clean-env:
 	@rm -rf $(GLOBAL_CONFIG_DIR)
 	@echo "-> Removed env."
 
+clean-examples:
+	@rm -rf $(EXAMPLE_OUT_DIR)
+	@echo "-> Removed examples."
+
 # ========================
 # Unlink system files
 # ========================
@@ -338,6 +434,6 @@ unlink-files:
 	@echo "-> Unlinked system files"
 
 # ========================
-# Clean all artifacts
+# Clean all artifacts(without examples)
 # ========================
 clean-all: clean-build clean-install unlink-files clean-env

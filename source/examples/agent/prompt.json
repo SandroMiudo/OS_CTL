@@ -1,0 +1,23 @@
+{
+  "tool": "x_display",
+  "object": "cmd_set_pixel_t",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "offset_x": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "offset_y": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "color": {
+        "type": "string",
+        "pattern": "^0x[0-9A-Fa-f]{6}$",
+        "description": "24-bit RGB value. Alpha is ignored. Example: 0xRRGGBB"
+      }
+    },
+    "required": ["offset_x", "offset_y", "color"]
+  }
+}
