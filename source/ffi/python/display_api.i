@@ -5,6 +5,7 @@
 #include "numpy_api.h"
 #include "endian.h"
 #include "pixels.h"
+#include <Python.h>
 
 extern void display_cb_verbose(char* msg, int status);
 extern void display_cb_log_wo(char* _, int status);

@@ -4,6 +4,7 @@ Draw simple face, only using set pixel command
 
 #include <stdint.h>
 #include "display_api.h"
+#include <stddef.h>
 
 // API WRAPPER
 static void set_pixel(unsigned int x, unsigned int y, uint32_t color) {
