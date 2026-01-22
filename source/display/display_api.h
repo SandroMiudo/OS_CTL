@@ -2,7 +2,6 @@
 #define DISPLAY_API_H
 
 #include <stdint.h>
-#include <Python.h>
 #include "pixels.h"
 
 #define WHITE 0 // off
