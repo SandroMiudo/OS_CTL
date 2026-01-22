@@ -1,0 +1,8 @@
+[package]
+name = "draw_pixel"
+version = "0.1.0"
+edition = "2021"
+authors = ["Sandro Miudo"]
+
+[dependencies]
+display_ffi = { path = "../../ffi/rust" }

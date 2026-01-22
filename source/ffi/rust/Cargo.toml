@@ -1,0 +1,11 @@
+[package]
+name = "display_ffi"
+version = "0.1.0"
+edition = "2021"
+authors = ["Sandro Miudo"]
+
+[build-dependencies]
+bindgen = "0.72.1"
+
+[dependencies]
+libc = "0.2"
